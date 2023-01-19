@@ -6,6 +6,14 @@
 * KataDB is also a backend for KataSQL an embeddable AnsiSQL engine for simple storage.  
 * KataDB is also a backend for columnar storage KataCol
 
+## How should we begin with? 
+
+We should write first working version in Clojure then, when design/API become
+stable, rewrite it in Go (and maybe Rust?)
+
+The idea is that I need to be able to experiment really fast with it. 
+Clojure is ideal for this. 
+
 ## Rationale 
 
 I've always wanted to write a database. So here it is. 
@@ -29,11 +37,11 @@ is to run it in production.
 Hence, the DB will have multiple limitations. The purpose 
 of limitations is to keep code simple. 
 
-## How
+
+## How to proceed
 
 Will write first iterations in Clojure. When 
 design becomes apparent, will rewrite in Go. 
-
 
 I've played a bit with concepts from DDD book. 
 
