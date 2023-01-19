@@ -31,6 +31,10 @@ of limitations is to keep code simple.
 
 ## How
 
+Will write first iterations in Clojure. When 
+design becomes apparent, will rewrite in Go. 
+
+
 I've played a bit with concepts from DDD book. 
 
 I immensely enjoy log based approaches, so I wanted
@@ -45,4 +49,11 @@ We start with a durable message queue that looks much
 like Kafka from API perspective.
 
 Then we use multiple workers that transform,
-index, recycle messages. 
+index and recycle. 
+
+Then we will divide Read and Write. We will have 
+unlimited readers and one master writer. 
+
+Readers will be stateless and there should 
+be possibility to run multiple readers from 
+CLI. 
