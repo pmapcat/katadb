@@ -3,9 +3,7 @@
          2. Read it
          3. Subscribe to it
          4. Discard blocks of it, based on policy"}
-  (:require [katadb.const :as c])
   (:gen-class))
-
 
 
 (def MAX-OFFSET Long/MAX_VALUE)
@@ -15,40 +13,44 @@
 (def BASE-CODING "utf8")
 (def FILES-RE #"^(\d+)_(\d+)(\.[a-z]+)$")
 
-(defprotocol LogFileWriter
-  "logfile is an endless log file with capability to be truncated if needed"
-  (defmethod make     [fpath])
-  (defmethod write    [record] "Will write log sequence, determines ")
-  (defmethod seq      [] "Returns lazyseq that will read until the log file, will block for new records ")
-  (defmethod truncate []))
+;; ;; probably nice abstraction ?? 
+;; (defprotocol LogFile
+;;   "logfile is an endless log file with capability to be truncated on demand"
+;;   (defmethod open     [fpath])
+;;   (defmethod write    [record] "Will write log sequence, determines ")
+;;   (defmethod seq      [] "Returns lazyseq that will read until the log file, will block for new records ")
+;;   (defmethod truncate []))
 
 
-(defrecord FSLogFile
-    LogFile
-  (make [fpath]
-    "initialize under current folder, seeking last buffer")
-  
-  (write [record]
-    "get current bucket and write to it, possibly moving target, if the bucket is full")
-
-  (seq []
-    "from the starting bucket to the current, do the read line, 
-     when nothing to read, block for the next record
-     when nothing to read, bucket is full, move forward 
-     and block for that data")
-  
-  (truncate []
-    "will delete records that are older than N offset, 
-     Dangerous, what if we are still reading while consuming data?
-     will need a master truncator and some sort of state control"))
+(defn tid
+  []
+  (.getId (Thread/currentThread)))
 
 
-(defrecord EphLogFile
-    LogFile
-  )
+(let [plock (Object.)]
+  (defn INFO [& args]
+    "does logging using lock"
+    (locking plock (apply println args))))
 
 
+(defn -consume-recur
+  "reads input line by line, returning lazy seq. Blocks, polling for changes every POLL-TIME"
+  [r]
+  (lazy-seq
+    (let [next (.readLine r)]
+      (cons next
+        (do (when-not next (Thread/sleep POLL-TIME))
+            (-consume-recur r))))))
 
+
+(defn consume-file
+  [reader]
+  (remove nil? (-consume-recur reader)))
+
+
+#_(future
+    (doseq [i (consume-file (clojure.java.io/reader "/home/mik/toy.log"))]
+      (INFO "Thread: " (tid) i)))
 
 
 (defn third
@@ -105,10 +107,6 @@
   [record]
   "asdasdas")
 
-
-(defn subscribe
-  "subscribes to a file"
-  [fpath])
 
 
 (defn define-bucket
