@@ -8,7 +8,7 @@
 
 (def MAX-OFFSET Long/MAX_VALUE)
 (def POLL-TIME 1000)
-(def RECORD-SIZEB 1024)
+(def RECORD-SIZEB 100)
 (def BUCKET-SIZER 10000)
 (def BASE-CODING "utf8")
 (def FILES-RE #"^(\d+)_(\d+)(\.[a-z]+)$")
@@ -46,7 +46,6 @@
 (defn consume-file
   [reader]
   (remove nil? (-consume-recur reader)))
-
 
 #_(future
     (doseq [i (consume-file (clojure.java.io/reader "/home/mik/toy.log"))]
@@ -93,34 +92,38 @@
   (apply max (map (comp third split-f) files)))
 
 
-(defn encode-record
+(defn utf8-len
+  [string]
+  (when string
+    (alength (.getBytes string "utf8"))))
+
+
+(defn encode
   "record is a UTF8 encoded fixed length message
    pads with ' ' if not enough,  throws, if larger 
    than RECORD-SIZEB
 
    fixed length is useful: we can control and define 
    bucket fullness, we can random access, we can use 
-   bisection
-
-   we use \n because that is how Grep and Emacs
-   are fast. Data should be easily inspectable "
+   bisection. We use \n because that is how Grep and Emacs
+   are fast. Data should be easy to inspect"
   [record]
-  "asdasdas")
+  (let [bsize (utf8-len record)]
+    (if (> bsize (dec RECORD-SIZEB)) nil
+        (str record (clojure.string/join "" (repeat (- RECORD-SIZEB (inc bsize)) " ")) "\n"))))
 
+(assert (= (utf8-len (encode "привіт")) RECORD-SIZEB))
+(assert (= (utf8-len (encode "")) RECORD-SIZEB))
+(assert (= (utf8-len (encode (clojure.string/join "" (repeat RECORD-SIZEB "h")))) nil))
 
-
-(defn define-bucket
-  [fpath]
-  
-  )
 
 (defn write!
-  [fpath val]
-  (with-open [w! (clojure.java.io/writer fpath
-                   :append true
-                   :encoding BASE-CODING)]
-    (.write w! val)
+  [fpath valseq]
+  (with-open [w! (clojure.java.io/writer fpath :append true :encoding BASE-CODING)]
+    (doseq [v valseq]
+      (.write w! v))
     (.flush w!)))
+
 
 
 (defn -main
