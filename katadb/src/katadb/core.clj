@@ -5,6 +5,8 @@
          4. Discard blocks of it, based on policy"}
   (:gen-class))
 
+(def RECORD-SIZEB 100)
+
 ;; =================== INFRA/FILE API (layer 0) ==========================
 
 
@@ -101,7 +103,7 @@
 
 (def MAX-OFFSET Long/MAX_VALUE)
 (def POLL-TIME 1000)
-(def RECORD-SIZEB 100)
+
 (def BUCKET-SIZER 10000)
 (def BUCKET-LIMITB (* RECORD-SIZEB BUCKET-SIZER))
 (def BASE-CODING "utf8")
@@ -146,7 +148,7 @@
 
 (defn full?
   [fpath]
-  (< (fsize fpath) BUCKET-LIMITB))
+  #_(< (fsize fpath) BUCKET-LIMITB))
 
 
 (defn get-bucket
@@ -156,7 +158,7 @@
 
 #_(defn log-write!
     [fpath valseq]
-    (first (not-fulls (list-files "/home/mik/demodb/"))))
+    #_(first (not-fulls (list-files "/home/mik/demodb/"))))
 #_(db-write! "/home/mik/demodb/" "hello test")
 
 

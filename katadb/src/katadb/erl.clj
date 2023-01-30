@@ -1,14 +1,14 @@
 (ns katadb.erl
-  {:doc "Erlang like set of primitives. I am reading a book, so here is that
+   {:doc "Erlang like set of primitives. I am reading a book, so here is that
 
-         I DONT PRENTEND THAT I KNOW WHAT I AM DOING!
+          I DONT PRENTEND THAT I KNOW WHAT I AM DOING!
 
-         If you know the name of a process you can send it a message
-         Message passing is the only way for processes to interact
-         Error handling is non-local
-         Processes do what they are supposed to do or fail.
-
-"}
+          If you know the name of a process you can send it a message
+          Message passing is the only way for processes to interact
+          Error handling is non-local
+          Processes do what they are supposed to do or fail.
+ "}
+  (:require [clojure.core.async :as async])
   (:gen-class))
 
 (defonce ^:dynamic -STORAGE (atom {}))
@@ -18,13 +18,15 @@
    ::error  identity
    ::new    identity})
 
+
 (defn -make-pid
   []
   (rand-int Integer/MAX_VALUE))
 
 
 (defn -make-channel
-  [])
+  [{:keys [capacity]}]
+  (async/chan (or capacity 1)))
 
 
 (defn -must-exist
@@ -37,7 +39,7 @@
   (assert (not (contains? @-STORAGE pid))))
 
 
-(defn -get-status!
+(defn -get-status
   [pid]
   (-must-exist pid)
   (get-in @-STORAGE [pid ::status]))
@@ -45,12 +47,17 @@
 
 (defn -must-run
   [pid]
-  (assert (= (-get-status! pid) ::run)))
+  (assert (= (-get-status pid) ::run)))
+
+
+(defn -running?
+  [pid]
+  (= (-get-status pid) ::run))
 
 
 (defn -must-not-run
   [pid]
-  (assert (not= (-get-status! pid) ::run)))
+  (assert (not= (-get-status pid) ::run)))
 
 
 (defn -set-status!
@@ -58,7 +65,9 @@
   (-must-exist pid)
   (update @-STORAGE pid
     (fn [val]
-      (status-fn (assoc val ::status status)))))
+      (let [status-fn (get -STATUS-FN status)]
+        (assert (not (nil? status-fn)))
+        (status-fn (assoc val ::status status))))))
 
 
 (defn -set-error!
@@ -71,17 +80,19 @@
 (defn -run!
   [pid]
   (-must-exist pid)
-  (let [{:keys [runner
+  (let [{:keys [proc-fn
                 chan]} (get @-STORAGE pid)]
     (-must-not-run pid)
     (-set-status! pid ::run)
-    ;; go block or something, check when internet is ON
-    (go (try (doseq [msg (!< chan)]
-               (-must-run pid)
-               (-get-status! pid)
-               (proc-fn msg))
-             (catch Exception e
-               (-set-error! pid e))))))
+    (async/go (loop []
+                (let [msg (async/<! chan)]
+                  
+                  (try
+                    (proc-fn msg)
+                    (catch Exception e
+                      (-set-error! pid e)))
+                  
+                  (when (-running? pid) (recur)))))))
 
 
 (defn -make
@@ -137,8 +148,7 @@
   [pid msg]
   (-must-exist pid)
   (let [chan (->> @-STORAGE (get pid) ::chan)]
-    ;; (>!! chan pid msg) TODO: core.async
-    ))
+    (async/>!! chan msg)))
 
 
 (defn api-basic-test
