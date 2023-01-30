@@ -86,7 +86,6 @@
     (-set-status! pid ::run)
     (async/go (loop []
                 (let [msg (async/<! chan)]
-                  
                   (try
                     (proc-fn msg)
                     (catch Exception e
@@ -148,7 +147,7 @@
   [pid msg]
   (-must-exist pid)
   (let [chan (->> @-STORAGE (get pid) ::chan)]
-    (async/>!! chan msg)))
+    (async/>! chan msg)))
 
 
 (defn api-basic-test
