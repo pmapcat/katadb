@@ -136,36 +136,28 @@
 
 
 (defn log-filelist
-  [fpath]
-
-  )
+  [fpath])
 
 
 (defn get-head
   [fpath]
   (file-list fpath))
 
+
 (defn full?
   [fpath]
   (< (fsize fpath) BUCKET-LIMITB))
 
 
-
 (defn get-bucket
   [dbpath]
-  (or (last (filter (comp not full?) file-list))
-    
-    )
-  )
+  (or (last (filter (comp not full?) file-list))))
 
 
-(defn log-write!
-  [fpath valseq]
-  (first (not-fulls (list-files "/home/mik/demodb/")))
-    
-  )
+#_(defn log-write!
+    [fpath valseq]
+    (first (not-fulls (list-files "/home/mik/demodb/"))))
 #_(db-write! "/home/mik/demodb/" "hello test")
-
 
 
 (defn -main
