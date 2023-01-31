@@ -20,6 +20,14 @@ Citing Page 27, six rules for fault tolerant system:
 
 Sidelines: 
 
+We are assuming unreliable message passing. 
+What to do if QUEUE is full? Should we block? Should we discard? 
+
+In theory, full queue is a fault, and we assume unreliable message passing. 
+So the process should die, queue should be discarded. Supervisor/other process
+can restart using larger capacity. 
+
+
 I am thinking about JSON/HTTP interface for sending message to remote machine. Like, pid must include remote(ip?) address
 So, it is possible to execute local(this machine ip + pid) and remote code. I think the easiest way is to provide http
 interface for process manipulation, you can call this machine interface and remote machine interface. 
@@ -29,40 +37,73 @@ Using JSON/HTTP allows seamless intergation with whatever you like.
 
 Sample API 
 
-Running old and new code at the same time can be tricky, in general, 
-we can use commit-id over <proc-fn> to know 100% what kind of code is possible to run on node 
+Running old and new code at the same time can be tricky, I want to make it explicit, in general, 
+we can use git tag to know 100% what kind of code is runnable on node 
 Node might be deployed long ago, might be depolyed right now, code should explicitly call new code
 I might be talking out of my a**, but something along these lines, we need explicit version dependency 
 of current runnable in order to be able to <Code upgrade>
+When node is deployed, it should have its tag (deployment id) explicit. 
+Thus, we know, when we call old code and new code. 
+To migrate: have at least two nodes, send code to new version
 
-GET  /runnables/           list of functions that node can run + their versions (commit hashes or tags) 
-POST /gitsha256/spawn      (returns pid)
-POST /gitsha256/pid/restart will restart if dead, do nothing if running
-POST /gitsha256/pid/send   (msg|shutdown) sending shutdown code will stop process, but not immediately, because of queue
-POST /gitsha256/pid/watch  (callback-url) will call callback-url if process dies with {error: true, reason: \"dead\"} 
-POST /gitsha256/pid/kill   will immediately kill process
+GET  /runnables/         list of functions that node can run 
+GET  /version            returns deployment id, current git tag
+POST /version/spawn      (returns pid)
+POST /version/pid/restart will restart if dead, do nothing if running
+POST /version/pid/send   (msg|shutdown) sending shutdown code will stop process, but not immediately, because of Queue
+POST /version/pid/watch  (callback-url) will call callback-url if process dies with {error: true, reason: \"dead\"} 
+POST /version/pid/kill   will immediately kill process, disposing of process Queue
 
  "}
-  (:require [clojure.core.async :as async])
-  (:gen-class))
+   (:require [clojure.core.async :as async]
+             [clojure.core.async.impl.protocols :as async.impl])
+   (:import [java.util LinkedList]
+            [clojure.lang Counted])
+   (:gen-class))
+
+         
+(def -DEFAULT-CAPACITY 100)
 
 (defonce ^:dynamic -STORAGE (atom {}))
 
+
 (def -STATUS-FN
   {::run    #(assoc % ::error nil)
-   ::error  identity
-   ::new    identity})
+   ::error  identity})
 
 
 (defn -make-pid
   []
   (rand-int Integer/MAX_VALUE))
 
+(defn -drain!
+  [^LinkedList buf]
+  (doseq [b buf]
+    (async.impl/remove!)))
 
-(defn -make-channel
+
+(deftype DroppingFillableBuffer [^LinkedList buf ^long n]
+  async.impl/UnblockingBuffer
+  async.impl/Buffer
+  (full? [_this]
+    (>= (.size buf) n))
+  (remove! [_this]
+    (.removeLast buf))
+  (add!* [this itm]
+    (when-not (>= (.size buf) n)
+      (.addFirst buf itm))
+    this)
+  (close-buf! [_this])
+  Counted
+  (count [_this]
+    (.size buf)))
+
+
+(defn -make-buffer
   [{:keys [capacity]}]
-  (async/chan (or capacity 1)))
+  (DroppingFillableBuffer. (LinkedList.) (or capacity DEFAULT-CAPACITY)))
 
+(def -full? async.impl/full?)
 
 (defn -must-exist
   [pid]
@@ -116,26 +157,33 @@ POST /gitsha256/pid/kill   will immediately kill process
   [pid]
   (-must-exist pid)
   (let [{:keys [proc-fn
+                -buf
                 chan]} (get @-STORAGE pid)]
     (-must-not-run pid)
     (-set-status! pid ::run)
     (async/go (loop []
-                (let [msg (async/<! chan)]
-                  (try
-                    (proc-fn msg)
-                    (catch Exception e
-                      (-set-error! pid e)))
-                  
-                  (when (-running? pid) (recur)))))))
+                (if (-full? -buf)
+                  (-set-error! pid (ex-info
+                                     "Buffer overflow/packets will be dropped"
+                                     {::type ::buffer-overflow}))
+                  (let [msg (async/<! chan)]
+                    (try
+                      (proc-fn msg)
+                      (catch Exception e
+                        (-set-error! pid e)))
+                    
+                    (when (-running? pid) (recur))))))))
 
 
 (defn -make
   [proc-fn opts]
-  {::pid     (-make-pid)
-   ::chan    (-make-channel opts)
-   ::proc-fn proc-fn
-   ::opts    opts
-   ::status  ::new})
+  (let [buf (-make-buffer opts)]
+    {::pid     (-make-pid)
+     ::-buf    buf
+     ::chan    (async/chan buf)
+     ::proc-fn proc-fn
+     ::opts    opts
+     ::status  nil}))
 
 ;; ===================== public API ====================
 
@@ -178,11 +226,17 @@ POST /gitsha256/pid/kill   will immediately kill process
   (= (-get-status pid) ::run))
 
 
+(defn dead?
+  [pid]
+  (= (-get-status pid) ::error))
+
+
 (defn send!
   [pid msg]
   (-must-exist pid)
-  (let [chan (->> @-STORAGE (get pid) ::chan)]
-    (async/>! chan msg)))
+  (when-not (dead? pid)
+    (let [chan (->> @-STORAGE (get pid) ::chan)]
+      (async/>! chan msg))))
 
 
 (defn api-basic-test
