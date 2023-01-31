@@ -7,6 +7,41 @@
           Message passing is the only way for processes to interact
           Error handling is non-local
           Processes do what they are supposed to do or fail.
+
+Citing Page 27, six rules for fault tolerant system:
+
+* Concurrency — Our system must support concurrency. The computational ecort needed to create or destroy a concurrent process should be very small, and there should be no penalty for creating large numbers of concurrent processes.
+* Error encapsulation — Errors occurring in one process must not be able to damage other processes in the system.
+* Fault detection — It must be possible to detect exceptions both locally (in the processes where the exception occurred) and remotely (we should be able to detect that an exception has occurred in a non-local process).
+* Fault identification — We should be able to identify why an exception occurred.
+* Code upgrade — there should exist mechanisms to change code as it is executing, and without stopping the system.
+* Stable storage — we need to store data in a manner which survives a system crash
+
+
+Sidelines: 
+
+I am thinking about JSON/HTTP interface for sending message to remote machine. Like, pid must include remote(ip?) address
+So, it is possible to execute local(this machine ip + pid) and remote code. I think the easiest way is to provide http
+interface for process manipulation, you can call this machine interface and remote machine interface. 
+
+Setting up a node is basically winding up a JVM with http handler. 
+Using JSON/HTTP allows seamless intergation with whatever you like.
+
+Sample API 
+
+Running old and new code at the same time can be tricky, in general, 
+we can use commit-id over <proc-fn> to know 100% what kind of code is possible to run on node 
+Node might be deployed long ago, might be depolyed right now, code should explicitly call new code
+I might be talking out of my a**, but something along these lines, we need explicit version dependency 
+of current runnable in order to be able to <Code upgrade>
+
+GET  /runnables/           list of functions that node can run + their versions (commit hashes or tags) 
+POST /gitsha256/spawn      (returns pid)
+POST /gitsha256/pid/restart will restart if dead, do nothing if running
+POST /gitsha256/pid/send   (msg|shutdown) sending shutdown code will stop process, but not immediately, because of queue
+POST /gitsha256/pid/watch  (callback-url) will call callback-url if process dies with {error: true, reason: \"dead\"} 
+POST /gitsha256/pid/kill   will immediately kill process
+
  "}
   (:require [clojure.core.async :as async])
   (:gen-class))
