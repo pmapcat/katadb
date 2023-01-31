@@ -61,10 +61,13 @@ POST /version/pid/kill   will immediately kill process, disposing of process Que
             [clojure.lang Counted])
    (:gen-class))
 
-         
+;; TODO: kill should fully discard process/metadata/go blocks,
+;;       although, it is possible to query status of pid
+
 (def -DEFAULT-CAPACITY 100)
 
 (defonce ^:dynamic -STORAGE (atom {}))
+(defonce ^:dynamic -GHOSTS (atom {}))
 
 
 (def -STATUS-FN
